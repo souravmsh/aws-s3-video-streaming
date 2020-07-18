@@ -43,8 +43,10 @@ class AWS_lib
 
 	public function __construct()
 	{
-		$this->ci  =& get_instance();
-		$this->aws = (object)$this->ci->load->config('aws', true);
+		// load codeigniter config
+		// $this->ci  =& get_instance();
+		// $this->aws = (object)$this->ci->load->config('aws', true);
+		$this->aws = include '../config/config.php';
 	}
 
 	// perfor all action
