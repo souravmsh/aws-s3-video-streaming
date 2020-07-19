@@ -24,7 +24,8 @@ use Aws\ElasticTranscoder\ElasticTranscoderClient;
 -----------------------------------------------------------------
 	# get signed url
 	if ($job['status'])
-	{
+	{ 
+		// videoKey = 200719-2x60x1xtxndkprv282obaa924mlonrb0t2qtwvtamqz
  		$signed_url = $this->aws_lib->signed_url($job['data']['key']);
  		var_dump($signed_url)
 	}
@@ -43,10 +44,8 @@ class AWS_lib
 
 	public function __construct()
 	{
-		// load codeigniter config
-		// $this->ci  =& get_instance();
-		// $this->aws = (object)$this->ci->load->config('aws', true);
-		$this->aws = include '../config/config.php';
+		$this->ci  =& get_instance();
+		$this->aws = (object)$this->ci->load->config('aws', true);
 	}
 
 	// perfor all action
@@ -65,6 +64,11 @@ class AWS_lib
 		return $upload; 
 	}
 
+	/*
+	| $reqFiles = $_FILES['file'] array
+	| $fileId   = 200101-12345
+	----------------------------------------------
+	*/
 	public function upload($reqFiles = [], $fileId = null)
 	{
 		$video_dir = $this->aws->upload_dir;
@@ -172,7 +176,6 @@ class AWS_lib
 	                	'url' => $result['ObjectURL']
 	                ]; 
 	        		$status = 'true'; 
-	        		$this->key = $file_path;
 	        		$this->source_url = $result['ObjectURL'];
 	            }
 	            else 
@@ -198,6 +201,11 @@ class AWS_lib
 
 	}
 
+	/*
+	| $videoKey = source path of the video
+	| Example videos/200101/12345.mp4
+	----------------------------------------------
+	*/
 	public function job($videoKey = null)
 	{
 		$result  = [];
@@ -210,7 +218,7 @@ class AWS_lib
 			$videoKey = str_replace('./', '', $videoKey);
 			$info = pathinfo($videoKey);
 			$fileName = basename($videoKey);
-			$videoId  =  basename($videoKey,'.'.$info['extension']);
+			$videoId  = basename($videoKey,'.'.$info['extension']);
 			$OutputKeyPrefix  = dirname($videoKey)."/".$videoId."/";
 			 
 			### ElasticTranscoderClient 
@@ -291,17 +299,40 @@ class AWS_lib
 		];
 	}
 
+	/*
+	| $reqFiles = $_FILES['file'] array
+	| $videoKey   = 200719-2x60x1xtxndkprv282obaa924mlonrb0t2qtwvtamqz
+	| # RESORCE URL
+	| {cloudfront_url}{upload_dir}/{videoKey-part-1}/{videoKey-part-2}/{playlist}.m3u8
+	| videos/200719/2x60x1xtxndkprv282obaa924mlonrb0t2qtwvtamqz/start.m3u8
+	| 
+	----------------------------------------------
+	*/
 	public function signed_url($videoKey = null, $policyAccept = true)
 	{ 
 		# All Available Variables
-		$status    = 'false';
+		$status      = 'false';
 		$signed_url  = ""; 
 		$message     = "";
-		$expires     = time() + 600; // (10 minutes * 60 seconds) seconds
-		$resourceKey = (filter_var($videoKey, FILTER_VALIDATE_URL)?$videoKey:($this->aws->cloudfront."/".str_replace('./', '', $videoKey)));
+		$expires     = time() + 600; // (10 minutes * 60 seconds) seconds  
 
 		if (!empty($videoKey))
-		{
+		{  
+			if (!filter_var($videoKey, FILTER_VALIDATE_URL))
+			{
+				if (strpos($videoKey, '-') !== false)
+				{
+					$path = explode("-", $videoKey);
+					$videoKey  = $path[0].'/'.$path[1];
+					$videoKey = "{$this->aws->upload_dir}/{$videoKey}/{$this->aws->playlist_name}.m3u8";
+				} else if (strpos($videoKey, '.m3u8') == false)
+				{
+					$videoKey = "{$videoKey}/{$this->aws->playlist_name}.m3u8";
+				}
+				$videoKey = str_replace('./', '/', $videoKey); 
+			}
+
+			$resourceKey = preg_replace('/([^:])(\/{2,})/', '$1/', "{$this->aws->cloudfront}/{$videoKey}"); 
 
 			# CloudFrontClient URL  
 			$cloudFrontClient = new CloudFrontClient([
@@ -374,9 +405,8 @@ class AWS_lib
 					$message .= "Signed url generated successful!";
 					$data = [
 						'policy'     => $policyAccept,
-						'key'        => $this->key,
 						'source_url' => $this->source_url,
-						'url'        => $signed_url,
+						'signed_url' => $signed_url,
 					];
 				}
 				else
